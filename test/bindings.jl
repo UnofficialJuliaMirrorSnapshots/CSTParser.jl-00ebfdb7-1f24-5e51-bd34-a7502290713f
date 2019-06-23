@@ -49,11 +49,11 @@ collect_bindings(CSTParser.parse("f(x::T) where {T <: S} where R = x")) == ["f",
 
 @test collect_bindings(CSTParser.parse("abstract type T end")) == ["T"]
 @test collect_bindings(CSTParser.parse("abstract type T <: S end")) == ["T"]
-@test collect_bindings(CSTParser.parse("abstract type T{S} end")) == ["T"]
+@test collect_bindings(CSTParser.parse("abstract type T{S} end")) == ["T", "S"]
 
 @test collect_bindings(CSTParser.parse("primitive type T 4 end")) == ["T"]
 @test collect_bindings(CSTParser.parse("primitive type T <: S 4 end")) == ["T"]
-@test collect_bindings(CSTParser.parse("primitive type T{S} 4 end")) == ["T"]
+@test collect_bindings(CSTParser.parse("primitive type T{S} 4 end")) == ["T", "S"]
 
 @test collect_bindings(CSTParser.parse("struct T end")) == ["T"]
 @test collect_bindings(CSTParser.parse("struct T <: S end")) == ["T"]
@@ -72,3 +72,8 @@ collect_bindings(CSTParser.parse("f(x::T) where {T <: S} where R = x")) == ["f",
 
 @test collect_bindings(CSTParser.parse("(a,b)->x")) == ["a", "b"]
 collect_bindings(CSTParser.parse("function f(a::T = 1) end")) == ["f", "a"]
+
+let cst = CSTParser.parse("function a::T * b::T end")
+    @test cst[2][1].binding !== nothing
+    @test cst[2][3].binding !== nothing
+end
