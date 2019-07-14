@@ -37,7 +37,7 @@ function sized_uint_literal(s::AbstractString, b::Integer)
     l <= 32  && return Base.parse(UInt32,  s)
     l <= 64  && return Base.parse(UInt64,  s)
     # l <= 128 && return Base.parse(UInt128, s)
-    l <= 128 && return Expr(:macrocall, Symbol("@uint128_str"), nothing, s)
+    l <= 128 && return Expr(:macrocall, GlobalRef(Core, Symbol("@uint128_str")), nothing, s)
     return Base.parse(BigInt, s)
 end
 
@@ -92,7 +92,7 @@ function Expr_int(x)
     is_hex && return sized_uint_literal(val, 4)
     is_oct && return sized_uint_oct_literal(val)
     is_bin && return sized_uint_literal(val, 1)
-    sizeof(val) <= sizeof(TYPEMAX_INT64_STR) && return Base.parse(Int64, val)
+    # sizeof(val) <= sizeof(TYPEMAX_INT64_STR) && return Base.parse(Int64, val)
     return Meta.parse(val)
     # # val < TYPEMAX_INT64_STR && return Base.parse(Int64, val)
     # sizeof(val) <= sizeof(TYPEMAX_INTval < TYPEMAX_INT128_STR128_STR) && return Base.parse(Int128, val)
@@ -111,7 +111,7 @@ function Expr_char(x)
     # one byte e.g. '\xff' maybe not valid UTF-8
     # but we want to use the raw value as a codepoint in this case
     sizeof(val) == 1 && return Char(codeunit(val, 1))
-    length(val) == 1 || error("Invalid character literal")
+    length(val) == 1 || error("Invalid character literal: $(Vector{UInt8}(x.val))")
     val[1]
 end
 
@@ -480,7 +480,7 @@ function Expr(x::EXPR)
             end
         end
         return ret
-    elseif x.typ === Comprehension
+    elseif x.typ === Comprehension || x.typ === DictComprehension
         ret = Expr(:comprehension)
         for a in x.args
             if !(ispunctuation(a))
