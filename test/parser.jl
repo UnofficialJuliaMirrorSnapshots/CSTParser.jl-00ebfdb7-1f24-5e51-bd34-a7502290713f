@@ -191,7 +191,7 @@ end
 
 @testset "Tuples" begin
     @static if VERSION > v"1.1-"
-        @test CSTParser.parse("1,").typ === CSTParser.ErrorToken
+        @test typof(CSTParser.parse("1,")) === CSTParser.ErrorToken
     else
         @test "1," |> test_expr
     end
@@ -362,6 +362,7 @@ end
     @test "@inline get_chunks_id(i::Integer) = _div64(Int(i)-1)+1, _mod64(Int(i) -1)" |> test_expr
     @test "@inline f() = (), ()" |> test_expr
     @test "@sprintf(\"%08d\", id)" |> test_expr
+    @test "[@m @n a for a in A]" |> test_expr # ensure closer.insquare propogates
 end
 
 @testset "Square " begin
@@ -531,10 +532,10 @@ end
 end
 
 @testset "Triple-quoted string" begin
-    @test CSTParser.parse("\"\"\" \" \"\"\"").val == " \" "
-    @test CSTParser.parse("\"\"\"a\"\"\"").val == "a"
-    @test CSTParser.parse("\"\"\"\"\"\"").val == ""
-    @test CSTParser.parse("\"\"\"\n\t \ta\n\n\t \tb\"\"\"").val == "a\n\nb"
+    @test valof(CSTParser.parse("\"\"\" \" \"\"\"")) == " \" "
+    @test valof(CSTParser.parse("\"\"\"a\"\"\"")) == "a"
+    @test valof(CSTParser.parse("\"\"\"\"\"\"")) == ""
+    @test valof(CSTParser.parse("\"\"\"\n\t \ta\n\n\t \tb\"\"\"")) == "a\n\nb"
     @test Expr(CSTParser.parse("\"\"\"\ta\n\tb \$c\n\td\n\"\"\"")) == Expr(:string, "\ta\n\tb ", :c, "\n\td\n")
     @test Expr(CSTParser.parse("\"\"\"\n\ta\n\tb \$c\n\td\n\"\"\"")) == Expr(:string, "\ta\n\tb ", :c, "\n\td\n")
     @test Expr(CSTParser.parse("\"\"\"\n\ta\n\tb \$c\n\td\n\t\"\"\"")) == Expr(:string, "a\nb ", :c, "\nd\n")
@@ -547,8 +548,8 @@ end
     "\"\"\"\n$(ws1)a\n\n$(ws1)b\n\n$(ws2)c\n\n$(ws2)d\n\n$(ws2)\"\"\"" |> test_expr
     @test "\"\"\"\n$(ws1)α\n$(ws1)β\n$(ws2)γ\n$(ws2)δ\n$(ws2)\"\"\"" |> test_expr
     @test "\"\"\"Float\$(bit)\"\"\"" |> test_expr
-    @test CSTParser.parse("\"\"\"abc\$(de)fg\"\"\"")[3].kind == CSTParser.Tokens.STRING
-    @test CSTParser.parse("\"\"\"abc(de)fg\"\"\"").kind == CSTParser.Tokens.TRIPLE_STRING
+    @test kindof(CSTParser.parse("\"\"\"abc\$(de)fg\"\"\"")[3]) == CSTParser.Tokens.STRING
+    @test kindof(CSTParser.parse("\"\"\"abc(de)fg\"\"\"")) == CSTParser.Tokens.TRIPLE_STRING
 end
 
 @testset "No longer broken things" begin
@@ -562,7 +563,7 @@ end
     @test "isa(a,a) != isa(a,a)" |> test_expr
     @test "@mac return x" |> test_expr
     @static if VERSION > v"1.1-"
-        @test CSTParser.parse("a,b,").args[4].typ === CSTParser.ErrorToken
+        @test typof(CSTParser.parse("a,b,").args[4]) === CSTParser.ErrorToken
     else
         @test "a,b," |> test_expr
     end
@@ -633,7 +634,7 @@ end
     @test "[a, b; c]" |> test_expr
     @test "t{a; b} " |> test_expr
     @test "a ~ b + c -d" |> test_expr
-    @test_broken "y[j=1:10,k=3:2:9; isodd(j+k) && k <= 8]" |> test_expr
+    @test "y[j=1:10,k=3:2:9; isodd(j+k) && k <= 8]" |> test_expr
     @test "(8=>32.0, 12=>33.1, 6=>18.2)" |> test_expr
     @test "(a,b = c,d)" |> test_expr
     @test "[ -1 -2;]" |> test_expr
@@ -696,6 +697,22 @@ end""" |> test_expr
     @test "2a * b" |> test_expr
     @test "(g1090(x::T)::T) where {T} = x+1.0" |> test_expr
     @test "(:) = Colon()" |> test_expr
+    @test "a + in[1]" |> test_expr
+    @test "function f(ex) +a end" |> test_expr
+    @test "x`\\\\`" |> test_expr
+    @test "x\"\\\\\"" |> test_expr
+    @test "x\"\\\\ \"" |> test_expr
+    @test "a.{1}" |> test_expr
+    @test "@~" |> test_expr
+end
+
+@testset "interpolation error catching" begin
+    x = CSTParser.parse("\"a \$ b\"")
+    @test x.fullspan == 7
+    @test CSTParser.typof(x[2]) === CSTParser.ErrorToken
+    x = CSTParser.parse("\"a \$# b\"")
+    @test x.fullspan == 8
+    @test CSTParser.typof(x[2]) === CSTParser.ErrorToken
 end
 
 @testset "Broken things" begin
@@ -748,18 +765,18 @@ end
 end
 
 @testset "errors" begin
-    @test CSTParser.parse("1? b : c ")[1].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("1 ?b : c ")[2].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("1 ? b :c ")[4].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("1:\n2")[2].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("1.a")[1].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("f ()").typ === CSTParser.ErrorToken
-    @test CSTParser.parse("f{t} ()").typ === CSTParser.ErrorToken
-    @test CSTParser.parse(": a")[1].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("const a")[2].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("const a = 1")[2].typ === CSTParser.BinaryOpCall
-    @test CSTParser.parse("const global a")[2].typ === CSTParser.ErrorToken
-    @test CSTParser.parse("const global a = 1")[2].typ === CSTParser.Global
+    @test typof(CSTParser.parse("1? b : c ")[1]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("1 ?b : c ")[2]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("1 ? b :c ")[4]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("1:\n2")[2]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("1.a")[1]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("f ()")) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("f{t} ()")) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse(": a")[1]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("const a")[2]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("const a = 1")[2]) === CSTParser.BinaryOpCall
+    @test typof(CSTParser.parse("const global a")[2]) === CSTParser.ErrorToken
+    @test typof(CSTParser.parse("const global a = 1")[2]) === CSTParser.Global
 end
 
 @testset "tuple params" begin
@@ -771,6 +788,28 @@ end
     @test "(1,2;3)" |> test_expr
     @test "f(;)" |> test_expr
 end
+
+@testset "docs" begin
+    @test "\"doc\"\nT" |> test_expr
+    @test "@doc \"doc\" T" |> test_expr
+    @test "@doc \"doc\"\nT" |> test_expr
+    @test "@doc \"doc\n\n\n\"\nT" |> test_expr
+    @test "begin\n@doc \"doc\"\n\nT\nend" |> test_expr
+    @test "@doc \"I am a module\" ModuleMacroDoc" |> test_expr
 end
+
+@testset "braces" begin
+    @test "{a}" |> test_expr
+    @test "{a, b}" |> test_expr
+    @test "{a, b; c}" |> test_expr
+    @test "{a, b; c = 1}" |> test_expr
+    @test "{a b}" |> test_expr
+    @test "{a b; c}" |> test_expr
+    @test "{a b; c = 1}" |> test_expr
+end
+
+
+end
+
 
 
