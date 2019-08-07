@@ -342,6 +342,11 @@ function setbinding!(x)
         end
     elseif typof(x) === Kw
         setbinding!(x.args[1], x)
+    elseif typof(x) === Parameters
+        for arg in x.args
+            typof(arg) === PUNCTUATION && continue    
+            setbinding!(arg)
+        end
     elseif typof(x) === InvisBrackets
         setbinding!(rem_invis(x))
     elseif typof(x) == UnaryOpCall && kindof(x.args[1]) === Tokens.DECLARATION
@@ -407,6 +412,8 @@ function mark_sig_args!(x)
             setbinding!(x.args[1])
             setbinding!(x.args[3])
         end
+    elseif typof(x) == UnaryOpCall && typof(x.args[2]) == InvisBrackets
+        setbinding!(x.args[2].args[2])
     end
 end
 Base.getindex(x::EXPR, i) = x.args[i]
